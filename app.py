@@ -1,5 +1,5 @@
 from game import NumberGuessGame
-
+#1
 def main():
     print("🎯 Welcome to the Number Guessing Game!")
     game = NumberGuessGame(1, 50)
