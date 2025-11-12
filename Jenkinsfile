@@ -1,52 +1,68 @@
-pipeline{
-    agent any 
-      environment {
-        VENV = "venv"
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = "guessing-game:latest"
+        APP_PORT = "5000"
     }
-    stages{
-        stage('cloning')
-        {
-          steps {
-            echo ' Cloning the GitHub repository'
-            git url: 'https://github.com/upkar123-bit/sample-guessing-number-game.git', branch: 'main'
-            
+
+    stages {
+        stage('Clone Repository') {
+            steps {
+                echo 'Cloning GitHub repository...'
+                git url: 'https://github.com/upkar123-bit/sample-guessing-number-game.git', branch: 'main'
+            }
         }
+
+        stage('Build Docker Image') {
+            steps {
+                echo 'Building Docker image...'
+                sh '''
+                    # Ensure Flask is installed even if requirements.txt is missing
+                    if [ ! -f requirements.txt ]; then
+                        echo "Flask==2.3.3" > requirements.txt
+                    elif ! grep -q "^Flask" requirements.txt; then
+                        echo "Flask==2.3.3" >> requirements.txt
+                    fi
+
+                    docker build -t guessing-game:latest .
+                '''
+            }
         }
-        stage('Build Application') {
+
+      stage('Run Tests in Container') {
     steps {
-        echo '⚙️ Building the Python application...'
-        sh '''#!/bin/bash
-        python3 -m venv venv
-        source venv/bin/activate
-        if [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-        else
-            echo "No requirements.txt found — skipping dependency install."
-        fi
+        echo 'Running tests inside Docker container...'
+        sh '''
+            docker run --rm -e PYTHONPATH=/app guessing-game:latest  pytest
         '''
     }
 }
 
-stage('Run Tests') {
-    steps {
-        echo 'Running test cases'
-        sh '''#!/bin/bash
-        source venv/bin/activate
-        python3 -m unittest discover -s tests -p "*.py" || true
-        '''
-    }
-}
 
+        stage('Deploy Container') {
+            steps {
+                echo 'Deploying Docker container...'
+                sh '''
+                    # Stop existing container if running
+                    if [ $(docker ps -q -f name=guessing-game:latest) ]; then
+                        docker stop guessing-game
+                        docker rm guessing-game
+                    fi
+
+                    # Run container
+                    docker run -d -p 5000:5000 --name guessing-game guessing-game:latest
+                '''
+            }
+        }
     }
-     post {
+
+    post {
         success {
-            echo 'pipeline executed successfully!'
+            echo "✅ CI/CD pipeline finished successfully."
         }
         failure {
-            echo 'build or test failed. Check console logs for details.'
-        }
-        always {
-            echo 'CI/CD pipeline completed.'
+            echo "build/test/deployment failed. Check console logs!"
         }
     }
 }
